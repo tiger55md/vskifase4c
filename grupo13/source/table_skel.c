@@ -14,9 +14,15 @@
 #include "../include/stats-private.h"
 #include <pthread.h>
 #include <unistd.h>
+#include <zookeeper/zookeeper.h>
 
+#define ZDATALEN 1024 * 1024
 
+typedef struct String_vector zoo_string; 
 
+char *root_path = "/kvstore";
+struct zhandle_t *zh;
+int is_connected;
 struct table_t *tabela;
 struct statistics *stats;
 double tempoEsperaTotal;
@@ -28,6 +34,7 @@ int statsWriterCounter = 1;
 int statsReaderCounter = 0;
 int tableWriterCounter = 1;
 int tableReaderCounter = 0;
+static char *watcher_ctx = "ZooKeeper Data Watcher";
 
 
 
@@ -39,6 +46,9 @@ void mutexTableReadInit();
 void mutexTableReadEnd();
 void mutexTableWriteInit();
 void mutexTableWriteEnd();
+void connection_watcher(zhandle_t *zzh, int type, int state, const char *path, void* context);
+static void child_watcher(zhandle_t *wzh, int type, int state, const char *zpath, void *watcher_ctx);
+
 
 
 /* Inicia o skeleton da tabela.
@@ -47,12 +57,19 @@ void mutexTableWriteEnd();
  * serem usadas pela tabela mantida no servidor.
  * Retorna 0 (OK) ou -1 (erro, por exemplo OUT OF MEMORY)
  */
-int table_skel_init(int n_lists){
+int table_skel_init(int n_lists, char* hostPort){
     stats =  malloc(sizeof(struct statistics));
     if(tabela == NULL){
         tabela = table_create(n_lists);
     }
     if(tabela == NULL) return -1;
+    char *separator = strtok(hostPort, ":");
+    int port = atoi(strtok(NULL, "\n"));
+    zh = zookeeper_init(hostPort, connection_watcher, port, 0, NULL, 0);
+    if( zh == NULL){
+        fprintf(stderr, "Erro a conectar ao zookeeper");
+        exit(EXIT_FAILURE);
+    }
     stats -> nGets = 0;
     stats -> nSize = 0;
     stats -> nPuts = 0;
@@ -61,6 +78,60 @@ int table_skel_init(int n_lists){
     stats -> nPrints = 0;
     stats -> tempoEspera = 0;
     tempoEsperaTotal = 0;
+    if (is_connected) {
+        if (ZNONODE == zoo_exists(zh, root_path, 0, NULL)) {
+            fprintf(stderr, "%s doesn't exist! Creating ZNode.\n", root_path);
+
+            if (ZOK != zoo_create(zh, root_path, NULL, -1, & ZOO_OPEN_ACL_UNSAFE, 0, NULL, 0)) {
+                fprintf(stderr, "%s created!\n", root_path);
+                if ( ZOK != zoo_create(zh, "/kvstore/primary", NULL, -1, & ZOO_OPEN_ACL_UNSAFE, ZOO_EPHEMERAL, NULL, 0)){
+                    fprintf(stderr, "/kvstore/primary created!\n");
+                }
+                else {
+                    fprintf(stderr,"Error Creating /kvstore/primary!\n");
+                    exit(EXIT_FAILURE);
+                } 
+            } 
+            else {
+                fprintf(stderr,"Error Creating %s!\n", root_path);
+                exit(EXIT_FAILURE);
+            } 
+        }
+
+        zoo_string* children_list =	(zoo_string *) malloc(sizeof(zoo_string));
+        int retval = zoo_get_children(zh, root_path, 0, children_list); 
+        if (retval != ZOK)	{
+            fprintf(stderr, "Erro a ir buscar os filhos de %s!\n", root_path);
+            exit(EXIT_FAILURE);
+	    }
+        if(children_list->count == 0){
+            if ( ZOK != zoo_create(zh, "/kvstore/primary", NULL, -1, & ZOO_OPEN_ACL_UNSAFE, ZOO_EPHEMERAL, NULL, 0)){
+                fprintf(stderr, "/kvstore/primary created!\n");
+            }
+            else {
+                fprintf(stderr,"Error Creating /kvstore/primary!\n");
+                exit(EXIT_FAILURE);
+             } 
+        }
+
+        if(ZNONODE == zoo_exists(zh, "/kvstore/backup", 0, NULL) && ZOK == zoo_exists(zh, "/kvstore/primary", 0, NULL)){
+            fprintf(stderr, "/kvstore/backup doesnt exist! Creating ZNode \n");
+            if ( ZOK != zoo_create(zh, "/kvstore/backup", NULL, -1, & ZOO_OPEN_ACL_UNSAFE, ZOO_EPHEMERAL, NULL, 0)){
+                fprintf(stderr, "/kvstore/backup created!\n");
+            }
+            else {
+                fprintf(stderr,"Error Creating /kvstore/backup!\n");
+                exit(EXIT_FAILURE);
+            } 
+        }
+
+        if (ZOK != zoo_wget_children(zh, root_path, &child_watcher, watcher_ctx, children_list)) {
+            fprintf(stderr, "Error setting watch at %s!\n", root_path);
+            exit(EXIT_FAILURE);
+		}
+
+
+    }
     return 0;
 }
 
@@ -69,6 +140,7 @@ int table_skel_init(int n_lists){
 void table_skel_destroy(){
     free(stats);
     table_destroy(tabela);
+    zookeeper_close(zh);
 }
 
 /* Executa uma operação na tabela (indicada pelo opcode contido em msg)
@@ -328,4 +400,19 @@ void mutexTableWriteEnd(){
 
 }
 
+
+void connection_watcher(zhandle_t *zzh, int type, int state, const char *path, void* context) {
+	if (type == ZOO_SESSION_EVENT) {
+		if (state == ZOO_CONNECTED_STATE) {
+			is_connected = 1; 
+		} else {
+			is_connected = 0; 
+		}
+	}
+}
+
+static void child_watcher(zhandle_t *wzh, int type, int state, const char *zpath, void *watcher_ctx){
+    
+
+}
 

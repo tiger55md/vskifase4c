@@ -25,8 +25,8 @@ int main(int argc, char *argv[]){
     signal(SIGINT, closeConn);
     signal(SIGPIPE, SIG_IGN);
 
-    if(argc != 3){
-        printf("Como correr: ./table-server <porto> <n_listas>\n");
+    if(argc != 4){
+        printf("Como correr: ./table-server <porto> <n_listas> <host:port> do ZooKeeper\n");
         printf("Exemplo: ./table-server 42221 4\n");
         return -1;
     }
@@ -39,7 +39,8 @@ int main(int argc, char *argv[]){
     }
 
     int nListas = atoi(argv[2]);
-    if(table_skel_init(nListas) < 0){
+    char hostPort = argv[3];
+    if(table_skel_init(nListas, hostPort) < 0){
         perror("Error starting table");
         network_server_close(listenSocket);
         return -1;
