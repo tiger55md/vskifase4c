@@ -23,7 +23,10 @@ typedef struct String_vector zoo_string;
 char *root_path = "/kvstore";
 struct zhandle_t *zh;
 int is_connected;
+char [100]hostPort;
 struct table_t *tabela;
+struct table_t *tPrimary;
+struct table_t *tBackup;
 struct statistics *stats;
 double tempoEsperaTotal;
 pthread_mutex_t mutexTable = PTHREAD_MUTEX_INITIALIZER;
@@ -77,6 +80,7 @@ int table_skel_init(int n_lists, char* hostPort){
     stats -> nGetKeys = 0;
     stats -> nPrints = 0;
     stats -> tempoEspera = 0;
+    hostPort = strdup(hostPort);
     tempoEsperaTotal = 0;
     if (is_connected) {
         if (ZNONODE == zoo_exists(zh, root_path, 0, NULL)) {
@@ -123,6 +127,10 @@ int table_skel_init(int n_lists, char* hostPort){
                 fprintf(stderr,"Error Creating /kvstore/backup!\n");
                 exit(EXIT_FAILURE);
             } 
+        }
+
+        if(ZOK == zoo_exists(zh, "/kvstore/backup", 0, NULL) && ZNONODE == zoo_exists(zh, "/kvstore/primary", 0, NULL)){
+            sleep(5);
         }
 
         if (ZOK != zoo_wget_children(zh, root_path, &child_watcher, watcher_ctx, children_list)) {
@@ -412,7 +420,30 @@ void connection_watcher(zhandle_t *zzh, int type, int state, const char *path, v
 }
 
 static void child_watcher(zhandle_t *wzh, int type, int state, const char *zpath, void *watcher_ctx){
-    
+    zoo_string *children_list =	(zoo_string *) malloc(sizeof(zoo_string));
+    if(tPrimary!= NULL && tBackup == NULL){
+        mutexTableWriteInit();
+    }
+    if (ZOK != zoo_wget_children(wzh, root_path, child_watcher,"", children_list)) {
+        fprintf(stderr, "Error setting watch at %s!\n", root_path);
+    }
+    if(tPrimary == NULL && tBackup != NULL){
+        tPrimary = tBackup;
+
+    }
+    if (ZOK != zoo_wget_children(wzh, root_path, child_watcher,"", children_list)) {
+        fprintf(stderr, "Error setting watch at %s!\n", root_path);
+    }
+    if(tPrimary != NULL && tBackup != NULL){
+        if(zoo_set(wzh, "/kvstore/backup", hostPort, strlen(hostPort), -1) != ZOK){
+            fprintf(stderr,"Erro a guardar ip e porto do servidor primario!\n");
+            exit(EXIT_FAILURE);
+        }
+
+
+    }
+
+
 
 }
 
