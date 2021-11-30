@@ -5,7 +5,7 @@ SRC_DIR = source
 BIN_DIR = binary
 LIB_DIR = lib
 CC = gcc
-CFLAGS = -g -Wall -lrt -pthread -lpthread -O2 -iquote $(INC_DIR)
+CFLAGS = -g -Wall -lrt -pthread -lzookeeper_mt -lpthread -O2 -iquote $(INC_DIR)
 LDFLAGS = /usr/local/lib/libprotobuf-c.a
 OBJLIB = table.o data.o list.o entry.o serialization.o client_stub.o network_client.o sdmessage.pb-c.o message.o 
 OBJCLIENT = table_client.o client-lib.o 
@@ -26,7 +26,7 @@ table-server: $(OBJSERVER)
 	$(CC) $(addprefix $(OBJ_DIR)/, $^) $(CFLAGS) $(LDFLAGS) -o $(BIN_DIR)/$@	
 
 table-client: $(OBJCLIENT) 
-	$(CC) $(OBJ_DIR)/table_client.o $(LIB_DIR)/client-lib.o $(LDFLAGS) -o $(BIN_DIR)/$@
+	$(CC) $(OBJ_DIR)/table_client.o $(LIB_DIR)/client-lib.o $(LDFLAGS) $(CFLAGS) -o $(BIN_DIR)/$@
 
 proto: 
 	$(PROTOC) sdmessage.proto

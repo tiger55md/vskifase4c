@@ -39,7 +39,7 @@ int main(int argc, char *argv[]){
     }
 
     int nListas = atoi(argv[2]);
-    char hostPort = argv[3];
+    char *hostPort = strdup(argv[3]);
     if(table_skel_init(nListas, hostPort) < 0){
         perror("Error starting table");
         network_server_close(listenSocket);

@@ -22,15 +22,20 @@
 #include "sdmessage.pb-c.h"
 #include <unistd.h>
 #include <pthread.h>
+#include <zookeeper/zookeeper.h>
+
 
 
 
 /* Remote table, que deve conter as informações necessárias para estabelecer a comunicação com o servidor. A definir pelo grupo em client_stub-private.h
  */
+struct zhandle_t *zh;
+int is_connected = 0;
 struct rtable_t;
 struct sockaddr_in *server;
 void getSock(short port);
 int connectSetup(const char *address_port, struct rtable_t *rtable);
+void connection_watcher(zhandle_t *zzh, int type, int state, const char *path, void* context);
 /* Função para estabelecer uma associação entre o cliente e o servidor, 
  * em que address_port é uma string no formato <hostname>:<port>.
  * Retorna NULL em caso de erro.
@@ -284,6 +289,14 @@ int connectSetup(const char *address_port, struct rtable_t *rtable){
     char *address = strtok(addressConverter, ":");
     short port = htons(atoi(strtok(NULL, "\n")));
     
+
+    zh = zookeeper_init(address_port, connection_watcher, port, 0, 0, 0);
+    if( zh == NULL){
+        fprintf(stderr, "Erro a conectar ao zookeeper");
+        exit(EXIT_FAILURE);
+    }
+    sleep(5);
+
     getSock(port);  //mete os dados no sockaddr_in server
 
     if(server == NULL){
@@ -301,4 +314,14 @@ int connectSetup(const char *address_port, struct rtable_t *rtable){
     rtable -> sock = server;
     free(addressConverter);
     return 0;
+}
+
+void connection_watcher(zhandle_t *zzh, int type, int state, const char *path, void* context) {
+	if (type == ZOO_SESSION_EVENT) {
+		if (state == ZOO_CONNECTED_STATE) {
+			is_connected = 1; 
+		} else {
+			is_connected = 0; 
+		}
+	}
 }
