@@ -22,8 +22,15 @@ typedef struct String_vector zoo_string;
 
 char *root_path = "/kvstore";
 struct zhandle_t *zh;
+<<<<<<< HEAD
 int is_connected = 0;
+=======
+int is_connected;
+char [100]hostPort;
+>>>>>>> 22a351a93334428241b3df1d306159b2ba7137de
 struct table_t *tabela;
+struct table_t *tPrimary;
+struct table_t *tBackup;
 struct statistics *stats;
 double tempoEsperaTotal;
 pthread_mutex_t mutexTable = PTHREAD_MUTEX_INITIALIZER;
@@ -79,6 +86,7 @@ int table_skel_init(int n_lists, char* hostPort){
     stats -> nGetKeys = 0;
     stats -> nPrints = 0;
     stats -> tempoEspera = 0;
+    hostPort = strdup(hostPort);
     tempoEsperaTotal = 0;
     sleep(5);
     if (is_connected) {
@@ -87,6 +95,47 @@ int table_skel_init(int n_lists, char* hostPort){
             sleep(3);
             zooKeeperInit();
         }
+<<<<<<< HEAD
+=======
+
+        zoo_string* children_list =	(zoo_string *) malloc(sizeof(zoo_string));
+        int retval = zoo_get_children(zh, root_path, 0, children_list); 
+        if (retval != ZOK)	{
+            fprintf(stderr, "Erro a ir buscar os filhos de %s!\n", root_path);
+            exit(EXIT_FAILURE);
+	    }
+        if(children_list->count == 0){
+            if ( ZOK != zoo_create(zh, "/kvstore/primary", NULL, -1, & ZOO_OPEN_ACL_UNSAFE, ZOO_EPHEMERAL, NULL, 0)){
+                fprintf(stderr, "/kvstore/primary created!\n");
+            }
+            else {
+                fprintf(stderr,"Error Creating /kvstore/primary!\n");
+                exit(EXIT_FAILURE);
+             } 
+        }
+
+        if(ZNONODE == zoo_exists(zh, "/kvstore/backup", 0, NULL) && ZOK == zoo_exists(zh, "/kvstore/primary", 0, NULL)){
+            fprintf(stderr, "/kvstore/backup doesnt exist! Creating ZNode \n");
+            if ( ZOK != zoo_create(zh, "/kvstore/backup", NULL, -1, & ZOO_OPEN_ACL_UNSAFE, ZOO_EPHEMERAL, NULL, 0)){
+                fprintf(stderr, "/kvstore/backup created!\n");
+            }
+            else {
+                fprintf(stderr,"Error Creating /kvstore/backup!\n");
+                exit(EXIT_FAILURE);
+            } 
+        }
+
+        if(ZOK == zoo_exists(zh, "/kvstore/backup", 0, NULL) && ZNONODE == zoo_exists(zh, "/kvstore/primary", 0, NULL)){
+            sleep(5);
+        }
+
+        if (ZOK != zoo_wget_children(zh, root_path, &child_watcher, watcher_ctx, children_list)) {
+            fprintf(stderr, "Error setting watch at %s!\n", root_path);
+            exit(EXIT_FAILURE);
+		}
+
+
+>>>>>>> 22a351a93334428241b3df1d306159b2ba7137de
     }
     return 0;
 }
@@ -368,7 +417,30 @@ void connection_watcher(zhandle_t *zzh, int type, int state, const char *path, v
 }
 
 static void child_watcher(zhandle_t *wzh, int type, int state, const char *zpath, void *watcher_ctx){
-    
+    zoo_string *children_list =	(zoo_string *) malloc(sizeof(zoo_string));
+    if(tPrimary!= NULL && tBackup == NULL){
+        mutexTableWriteInit();
+    }
+    if (ZOK != zoo_wget_children(wzh, root_path, child_watcher,"", children_list)) {
+        fprintf(stderr, "Error setting watch at %s!\n", root_path);
+    }
+    if(tPrimary == NULL && tBackup != NULL){
+        tPrimary = tBackup;
+
+    }
+    if (ZOK != zoo_wget_children(wzh, root_path, child_watcher,"", children_list)) {
+        fprintf(stderr, "Error setting watch at %s!\n", root_path);
+    }
+    if(tPrimary != NULL && tBackup != NULL){
+        if(zoo_set(wzh, "/kvstore/backup", hostPort, strlen(hostPort), -1) != ZOK){
+            fprintf(stderr,"Erro a guardar ip e porto do servidor primario!\n");
+            exit(EXIT_FAILURE);
+        }
+
+
+    }
+
+
 
 }
 
