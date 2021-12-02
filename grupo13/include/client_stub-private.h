@@ -10,10 +10,13 @@
 #define _CLIENT_STUB_PRIVATE_H
 
 #include "client_stub.h"
+#include <zookeeper/zookeeper.h>
 
 struct rtable_t{
   struct sockaddr_in *sock;
   int sockfd;
+  char *primaryIP;
+  zhandle_t *zooHandle;
 };
 
 

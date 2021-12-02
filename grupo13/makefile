@@ -9,7 +9,7 @@ CFLAGS = -g -Wall -lrt -pthread -lzookeeper_mt -lpthread -O2 -iquote $(INC_DIR)
 LDFLAGS = /usr/local/lib/libprotobuf-c.a
 OBJLIB = table.o data.o list.o entry.o serialization.o client_stub.o network_client.o sdmessage.pb-c.o message.o 
 OBJCLIENT = table_client.o client-lib.o 
-OBJSERVER = table_server.o network_server.o table_skel.o message.o sdmessage.pb-c.o list.o data.o entry.o table.o serialization.o
+OBJSERVER = table_server.o network_server.o table_skel.o client_stub.o message.o network_client.o sdmessage.pb-c.o list.o data.o entry.o table.o serialization.o
 PROTOC= protoc --c_out=.
 
 run:

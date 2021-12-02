@@ -10,6 +10,7 @@
 #include <netinet/in.h>
 #include <stdlib.h>
 #include <signal.h>
+#include <string.h>
 #include "../include/network_server.h"
 #include "../include/table_skel.h"
 
@@ -30,7 +31,6 @@ int main(int argc, char *argv[]){
         printf("Exemplo: ./table-server 42221 4\n");
         return -1;
     }
-
     int porta = htons(atoi(argv[1]));
     listenSocket = network_server_init(porta);
     if(listenSocket < 0){
@@ -40,7 +40,7 @@ int main(int argc, char *argv[]){
 
     int nListas = atoi(argv[2]);
     char *hostPort = strdup(argv[3]);
-    if(table_skel_init(nListas, hostPort) < 0){
+    if(table_skel_init(nListas, hostPort, argv[1]) < 0){
         perror("Error starting table");
         network_server_close(listenSocket);
         return -1;

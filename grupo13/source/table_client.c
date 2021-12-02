@@ -14,8 +14,26 @@
 #include "../include/client_stub.h"
 #include "../include/client_stub-private.h"
 #include "../include/stats-private.h"
+#include <zookeeper/zookeeper.h>
 
 struct rtable_t *rtable;
+zhandle_t *zh;
+static int is_connected; 
+static char *root_path = "/kvstore";
+
+typedef struct String_vector zoo_string;
+static char *watcher_ctx = "ZooKeeper Data Watcher";
+static void child_watcherStub(zhandle_t *wzh, int type, int state, const char *zpath, void *watcher_ctx);
+
+void connection_watcher(zhandle_t *zzh, int type, int state, const char *path, void* context) {
+	if (type == ZOO_SESSION_EVENT) {
+		if (state == ZOO_CONNECTED_STATE) {
+			is_connected = 1; 
+		} else {
+			is_connected = 0; 
+		}
+	}
+}
 
 
 void closeConn(){
@@ -64,12 +82,42 @@ int main(int argc, char** argv){
         return -1;
     }
 
-    rtable = rtable_connect(argv[1]);
+    zoo_string* children_list = (zoo_string *) malloc(sizeof(zoo_string));
+    char *converter = strdup(argv[1]);
+    strtok(converter, ":");
+    char *port = strtok(NULL, "\n");
+    zh = zookeeper_init(argv[1], connection_watcher, atoi(port), 0, 0, 0);
+    if( zh == NULL){
+        fprintf(stderr, "Erro a conectar ao zookeeper");
+        exit(EXIT_FAILURE);
+    }
+    char *primaryPortIP = malloc(1024);
+    int ipLen = 1024;
+
+    if (ZOK != zoo_wget_children(zh, root_path, &child_watcherStub, watcher_ctx, children_list)) {/*quando apanha sinal, chama o child_watcher()*/
+        fprintf(stderr, "Error setting watch at %s!\n", root_path); //compromete transparencia?
+    }
+
+
+
+    if( ZOK != zoo_get(zh, "/kvstore/primary", 0, primaryPortIP, &ipLen, NULL)){
+        fprintf(stderr, "no primary nao existe");
+        exit(EXIT_FAILURE);
+    }
+
+    rtable = rtable_connect(primaryPortIP);
     if(rtable == NULL){
         perror("Erro a ligar ao server");
         return -1;
     }
+    rtable -> primaryIP = primaryPortIP;
+    rtable -> zooHandle = zh;
     
+
+    if(rtable == NULL){
+        fprintf(stderr, "Nao é possivel executar ações na tabela");
+
+    }
     while(1){
         char comando[100];
         printf("Que comando deseja executar?: \n");
@@ -142,6 +190,43 @@ int main(int argc, char** argv){
                 printf("OP table_print: %ld\n", stats -> nPrints);
                 printf("Tempo Medio de Espera em segundos: %lfs\n",  stats -> tempoEspera);
                 free(stats);
+            }
+        }
+    }
+}
+
+
+static void child_watcherStub(zhandle_t *wzh, int type, int state, const char *zpath, void *watcher_ctx){
+    zoo_string* children_list = (zoo_string *) malloc(sizeof(zoo_string));
+    if(state == ZOO_CONNECTED_STATE){
+        if(type == ZOO_CHILD_EVENT){
+            if (ZOK != zoo_wget_children(zh, root_path, child_watcherStub, watcher_ctx, children_list)) {
+                fprintf(stderr, "Error setting watch at %s!\n", root_path); 
+            }
+            fprintf(stderr, "\n=== znode listing func=== [ %s ]", root_path); 
+            for (int i = 0; i < children_list->count; i++)  {
+                fprintf(stderr, "\n(%d): %s", i+1, children_list->data[i]);
+            }
+            fprintf(stderr, "\n=== done ===\n");
+
+            if(children_list -> count == 1){
+                if(strcmp(children_list -> data[0], "primary") != 0){
+                    rtable -> primaryIP = NULL;
+                    rtable -> zooHandle = NULL;
+                    rtable_disconnect(rtable);
+                    rtable = NULL;
+                }
+            }
+            else{
+                char *primaryPortIP = malloc(1024);
+                int ipLen = 1024;
+                if( ZOK != zoo_get(zh, "/kvstore/primary", 0, primaryPortIP, &ipLen, NULL)){
+                    fprintf(stderr, "no primary nao existe");
+                    exit(EXIT_FAILURE);
+                }
+                rtable = rtable_connect(primaryPortIP);
+                rtable -> primaryIP = primaryPortIP;
+                rtable -> zooHandle = zh;
             }
         }
     }

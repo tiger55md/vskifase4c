@@ -22,11 +22,17 @@
 #include "sdmessage.pb-c.h"
 #include <unistd.h>
 #include <pthread.h>
+#include <zookeeper/zookeeper.h>
+
+
+void connection_watcherStub(zhandle_t *zzh, int type, int state, const char *path, void* context);
+int is_connected;
 
 
 
 /* Remote table, que deve conter as informações necessárias para estabelecer a comunicação com o servidor. A definir pelo grupo em client_stub-private.h
  */
+zhandle_t *zh;
 struct rtable_t;
 struct sockaddr_in *server;
 void getSock(short port);
@@ -41,8 +47,28 @@ struct rtable_t *rtable_connect(const char *address_port){
     struct rtable_t *rtable = malloc(sizeof(struct rtable_t));
 
     if(rtable== NULL) return NULL;
+    char *separator = strdup(address_port);
+    strtok(separator, ":");
+    char *port = strtok(NULL, "\n");
 
-    if( connectSetup(address_port, rtable) == -1 ) return NULL;
+    zh = zookeeper_init(address_port, connection_watcherStub, atoi(port), 0, 0, 0);
+    if( zh == NULL){
+        fprintf(stderr, "Erro a conectar ao zookeeper");
+        exit(EXIT_FAILURE);
+    }
+    sleep(2);
+    free(separator);
+
+    char *primaryPortIP = malloc(1024);
+    int ipLen = 1024;
+
+    if( ZOK != zoo_get(zh, "/kvstore/primary", 0, primaryPortIP, &ipLen, NULL)){
+        fprintf(stderr, "no primary nao existe");
+        exit(EXIT_FAILURE);
+    }
+
+    const char *primaryIP  = strdup(primaryPortIP);
+    if( connectSetup(primaryIP, rtable) == -1 ) return NULL;
 
     if(network_connect(rtable) < 0){
         free(rtable);
@@ -50,6 +76,7 @@ struct rtable_t *rtable_connect(const char *address_port){
         return NULL;
     }
     
+    free(primaryPortIP);
     return rtable;
 }
 
@@ -301,4 +328,15 @@ int connectSetup(const char *address_port, struct rtable_t *rtable){
     rtable -> sock = server;
     free(addressConverter);
     return 0;
+}
+
+
+void connection_watcherStub(zhandle_t *zzh, int type, int state, const char *path, void* context) {
+	if (type == ZOO_SESSION_EVENT) {
+		if (state == ZOO_CONNECTED_STATE) {
+			is_connected = 1; 
+		} else {
+			is_connected = 0; 
+		}
+	}
 }

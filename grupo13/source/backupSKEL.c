@@ -69,7 +69,7 @@ static void child_watcher(zhandle_t *wzh, int type, int state, const char *zpath
  * serem usadas pela tabela mantida no servidor.
  * Retorna 0 (OK) ou -1 (erro, por exemplo OUT OF MEMORY)
  */
-int table_skel_init(int n_lists, char* hostPort, char* listenPort){
+int table_skel_init(int n_lists, char* hostPort){
     stats =  malloc(sizeof(struct statistics));
     if(tabela == NULL){
         tabela = table_create(n_lists);
@@ -78,6 +78,7 @@ int table_skel_init(int n_lists, char* hostPort, char* listenPort){
     char *hostPort1 = strdup(hostPort);
     strtok(hostPort, ":");
     char *port = strtok(NULL, "\n");
+    printf("%s\n", hostPort1);
     zh = zookeeper_init(hostPort1, connection_watcher, atoi(port), 0, 0, 0);
     if( zh == NULL){
         fprintf(stderr, "Erro a conectar ao zookeeper");
@@ -130,8 +131,7 @@ int table_skel_init(int n_lists, char* hostPort, char* listenPort){
         /*---------------concatenar ip com port do servidor---------------*/
         char *ip_port = IPBuffer; 
         strcat(ip_port, ":");
-        strcat(ip_port, listenPort);
-        printf("IP do Primario: %s\n", ip_port);
+        strcat(ip_port, port);
         /*----------------------------------------------------------------*/
         if(ZOK != zoo_create(zh, node_path, ip_port, strlen(ip_port), &ZOO_OPEN_ACL_UNSAFE, ZOO_EPHEMERAL, serverID, server_ID_len)){
             fprintf(stderr, "Error creating znode from path %s!\n", node_path);
@@ -176,9 +176,8 @@ int table_skel_init(int n_lists, char* hostPort, char* listenPort){
             /*---------------concatenar ip com port do servidor---------------*/
             char *ip_port = IPBuffer; 
             strcat(ip_port, ":");
-            strcat(ip_port, listenPort);
+            strcat(ip_port, port);
             primaryIP = ip_port;
-            printf("IP do Primario: %s\n", ip_port);
             /*----------------------------------------------------------------*/
             if(ZOK != zoo_create(zh, node_path, ip_port, strlen(ip_port), &ZOO_OPEN_ACL_UNSAFE, ZOO_EPHEMERAL, serverID, server_ID_len)){
                 fprintf(stderr, "Error creating znode from path %s!\n", node_path);
@@ -218,9 +217,9 @@ int table_skel_init(int n_lists, char* hostPort, char* listenPort){
             IPBuffer = inet_ntoa(*((struct in_addr*) host_entry->h_addr_list[0])); 
 
             /*---------------concatenar ip com port do servidor---------------*/
-            char *ip_port = strdup("127.0.2.2");
+            char *ip_port = IPBuffer; 
             strcat(ip_port, ":");
-            strcat(ip_port, listenPort);
+            strcat(ip_port, port);
             /*----------------------------------------------------------------*/
             if(ZOK != zoo_create(zh, node_path, ip_port, strlen(ip_port), &ZOO_OPEN_ACL_UNSAFE, ZOO_EPHEMERAL, serverID, server_ID_len)){
                 fprintf(stderr, "Error creating znode from path %s!\n", node_path);
@@ -228,7 +227,6 @@ int table_skel_init(int n_lists, char* hostPort, char* listenPort){
             }
             fprintf(stderr, "Ephemeral ZNode created! ZNode path: %s\n", serverID);
             backupIP = ip_port;
-            printf("IP do Backup: %s\n", ip_port);
             backup = rtable_connect(ip_port);
             sleep(5);
 
@@ -300,6 +298,13 @@ int invoke(MessageT *msg){
             stats -> nDels++;
             mutexStatsWriteEnd();
             mutexTableWriteInit();
+            if(rtable_del(backup, msg -> key) != 0){
+                msg ->    opcode = MESSAGE_T__OPCODE__OP_ERROR;
+                msg ->   c_type = MESSAGE_T__C_TYPE__CT_NONE;
+                mutexTableWriteEnd();
+                return -1;
+
+            }
             int verify = table_del(tabela, msg ->   key);
             mutexTableWriteEnd();
             if(verify == -1){
@@ -364,6 +369,13 @@ int invoke(MessageT *msg){
             }
             struct data_t *data = data_create2( binData.len, binData.data);
             struct entry_t *entry = entry_create(msg -> key, data);
+            if(rtable_put(backup, entry) != 0){
+                msg ->    opcode = MESSAGE_T__OPCODE__OP_ERROR;
+                msg ->   c_type = MESSAGE_T__C_TYPE__CT_NONE;
+                entry_destroy(entry);
+                return -1;
+            }
+            entry_destroy(entry);
             mutexTableWriteInit();
             int result = table_put(tabela, msg ->   key, data);
             mutexTableWriteEnd();
@@ -375,9 +387,7 @@ int invoke(MessageT *msg){
             }
             msg ->    opcode = MESSAGE_T__OPCODE__OP_PUT + 1;
             msg ->   c_type = MESSAGE_T__C_TYPE__CT_NONE;
-            printf("pixa2\n");
             free(data);
-            printf("pixa3\n");
             return 0;
         }
     }
