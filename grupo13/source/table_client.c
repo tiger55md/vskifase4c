@@ -98,8 +98,6 @@ int main(int argc, char** argv){
         fprintf(stderr, "Error setting watch at %s!\n", root_path); //compromete transparencia?
     }
 
-
-
     if( ZOK != zoo_get(zh, "/kvstore/primary", 0, primaryPortIP, &ipLen, NULL)){
         fprintf(stderr, "no primary nao existe");
         exit(EXIT_FAILURE);
@@ -112,7 +110,6 @@ int main(int argc, char** argv){
     }
     rtable -> primaryIP = primaryPortIP;
     rtable -> zooHandle = zh;
-    
 
     if(rtable == NULL){
         fprintf(stderr, "Nao é possivel executar ações na tabela");

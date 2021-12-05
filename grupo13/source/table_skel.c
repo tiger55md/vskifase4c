@@ -45,6 +45,7 @@ int tableReaderCounter = 0;
 static char *watcher_ctx = "ZooKeeper Data Watcher";
 char *serverID;
 
+
 struct rtable_t *backup = NULL;
 char *primaryIP;
 char *backupIP;
@@ -218,7 +219,7 @@ int table_skel_init(int n_lists, char* hostPort, char* listenPort){
             IPBuffer = inet_ntoa(*((struct in_addr*) host_entry->h_addr_list[0])); 
 
             /*---------------concatenar ip com port do servidor---------------*/
-            char *ip_port = strdup("127.0.2.2");
+            char *ip_port = IPBuffer;
             strcat(ip_port, ":");
             strcat(ip_port, listenPort);
             /*----------------------------------------------------------------*/
@@ -229,7 +230,8 @@ int table_skel_init(int n_lists, char* hostPort, char* listenPort){
             fprintf(stderr, "Ephemeral ZNode created! ZNode path: %s\n", serverID);
             backupIP = ip_port;
             printf("IP do Backup: %s\n", ip_port);
-            backup = rtable_connect(ip_port);
+            //backup = rtable_connect(ip_port);
+            printf("Backup conectou");
             sleep(5);
 
             }
@@ -290,11 +292,11 @@ int invoke(MessageT *msg){
     }
     if(msg ->   opcode == MESSAGE_T__OPCODE__OP_DEL){
         if(msg ->    c_type == MESSAGE_T__C_TYPE__CT_KEY){
-            if(backup == NULL){
-                msg ->    opcode = MESSAGE_T__OPCODE__OP_ERROR;
-                msg ->   c_type = MESSAGE_T__C_TYPE__CT_NONE;
-                return -1;
-            }
+            //if(backup == NULL){
+            //    msg ->    opcode = MESSAGE_T__OPCODE__OP_ERROR;
+            //    msg ->   c_type = MESSAGE_T__C_TYPE__CT_NONE;
+            //    return -1;
+            //}
 
             mutexStatsWriteInit();
             stats -> nDels++;
@@ -348,11 +350,11 @@ int invoke(MessageT *msg){
     }
     if(msg ->   opcode == MESSAGE_T__OPCODE__OP_PUT){
         if(msg ->    c_type == MESSAGE_T__C_TYPE__CT_ENTRY){
-            if(backup == NULL){
-                msg ->    opcode = MESSAGE_T__OPCODE__OP_ERROR;
-                msg ->   c_type = MESSAGE_T__C_TYPE__CT_NONE;
-                return -1;
-            }
+            //if(backup == NULL){
+            //    msg ->    opcode = MESSAGE_T__OPCODE__OP_ERROR;
+            //    msg ->   c_type = MESSAGE_T__C_TYPE__CT_NONE;
+            //    return -1;
+            //}
             ProtobufCBinaryData binData = msg -> data;
             mutexStatsWriteInit();
             stats -> nPuts++;
@@ -363,7 +365,7 @@ int invoke(MessageT *msg){
                 return -1;
             }
             struct data_t *data = data_create2( binData.len, binData.data);
-            struct entry_t *entry = entry_create(msg -> key, data);
+            struct entry_t *entry = entry_create(msg ->  key, data);
             mutexTableWriteInit();
             int result = table_put(tabela, msg ->   key, data);
             mutexTableWriteEnd();
@@ -375,9 +377,7 @@ int invoke(MessageT *msg){
             }
             msg ->    opcode = MESSAGE_T__OPCODE__OP_PUT + 1;
             msg ->   c_type = MESSAGE_T__C_TYPE__CT_NONE;
-            printf("pixa2\n");
             free(data);
-            printf("pixa3\n");
             return 0;
         }
     }
@@ -623,3 +623,4 @@ static void child_watcher(zhandle_t *wzh, int type, int state, const char *zpath
     free(children_list);
 
 }
+

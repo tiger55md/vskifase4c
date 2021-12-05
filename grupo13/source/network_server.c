@@ -164,6 +164,7 @@ void *mainLoop(void *clientSocket){
             perror("Ocorreu um erro");
         }
 
+
         if(network_send(socketConn, msg) < 0){
             perror("Erro ao enviar mensagem");
             break;
